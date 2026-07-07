@@ -10,3 +10,4 @@ mlruns/
 
 *.log
 *.tmp
+docs/06_arquitectura_batch.md

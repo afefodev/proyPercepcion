@@ -7,10 +7,40 @@ Este documento resume el estado del proyecto, explica los tres notebooks existen
 ## 1. Resumen ejecutivo
 
 - Objetivo: construir un clasificador que identifique frutas frescas y podridas usando el dataset de Kaggle.
-- Artefactos principales en el repositorio: `notebooks/01_exploracion_datos.ipynb`, `notebooks/02_baseline_HOG_SVM.ipynb`, `notebooks/03_modelo_final_transfer_learning.ipynb`.
+- Artefactos principales en el repositorio: `notebooks/01_exploracion_datos.ipynb`, `notebooks/02_baseline_HOG_SVM.ipynb`, `notebooks/03_modelo_final_transfer_learning.ipynb`, `notebooks/04_pipeline_batch.ipynb` y `src/pipeline_batch.py`.
 - Métricas principales obtenidas:
   - Baseline (HOG + SVM): accuracy ≈ 0.80 en test.
   - Modelo final (EfficientNet‑B0 transfer learning): accuracy ≈ 0.9826 en test (reporte por clases incluido en el notebook).
+  - Pipeline batch de demostración: predicciones por imagen con salida en formato Parquet.
+
+---
+
+## 11. Arquitectura de datos y pipeline a escala
+
+- Arquitectura elegida: procesamiento por lotes (Batch).
+- Justificación: las imágenes se analizan cuando ya están almacenadas en carpetas, por lo que el objetivo es procesar conjuntos acumulados y no reaccionar a eventos en tiempo real.
+- Flujo general del pipeline:
+  1. Se leen las imágenes desde una estructura de carpetas que simula un Data Lake.
+  2. Se cargan las rutas y se aplican transformaciones de preprocesamiento.
+  3. Se ejecuta la inferencia con el modelo entrenado.
+  4. Se guardan las predicciones en un archivo de salida para análisis posterior.
+- Implementación de apoyo:
+  - Se diseñó un notebook específico para documentar el flujo batch: `notebooks/04_pipeline_batch.ipynb`.
+  - La lógica del flujo se centralizó en `src/pipeline_batch.py` para facilitar reutilización.
+- Relación con despliegue y MLOps:
+  - Este pipeline Batch puede evolucionar a un job programado o a un servicio contenedorizado.
+  - El modelo puede empaquetarse con Docker y exponerse con Flask como microservicio de inferencia.
+  - MLflow puede utilizarse para registrar métricas, versiones de modelo y trazabilidad de experimentos.
+
+---
+
+## 12. Cómo defender la elección de Batch
+
+- Batch sí es útil cuando el objetivo es procesar lotes de imágenes al cierre de un turno, en auditorías o en control de inventario.
+- En ese escenario, no se necesita respuesta inmediata por fruta individual, sino un resultado consolidado del lote completo.
+- Si el sistema tuviera que reaccionar en el instante sobre una cinta transportadora o una cámara industrial, ahí sí correspondería una arquitectura Streaming.
+- La decisión de usar PySpark en local responde al objetivo académico de mostrar una solución escalable, aunque el conjunto de datos actual no sea masivo.
+- En una defensa oral, se puede decir: "El proyecto se implementó en Batch porque procesa imágenes acumuladas y genera resultados diferidos; PySpark se usó para representar la escalabilidad del pipeline y dejarlo preparado para un entorno distribuido".
 
 ---
 

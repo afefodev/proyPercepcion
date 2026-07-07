@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clasificador de Frutas</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4efe7;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #d97706;
+      --accent-2: #065f46;
+      --border: #e5e7eb;
+      --shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(217, 119, 6, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(6, 95, 70, 0.12), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(980px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .hero {
+      padding: 32px 32px 16px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(217, 119, 6, 0.08), rgba(6, 95, 70, 0.05));
+    }
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.05;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 68ch;
+    }
+    .content {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 24px;
+      padding: 28px 32px 32px;
+    }
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      background: #fff;
+    }
+    .dropzone {
+      border: 2px dashed #d1d5db;
+      border-radius: 18px;
+      padding: 24px;
+      text-align: center;
+      transition: border-color .2s ease, transform .2s ease, background .2s ease;
+      background: #fafafa;
+      cursor: pointer;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(217, 119, 6, 0.04);
+      transform: translateY(-1px);
+    }
+    .dropzone strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+    .dropzone span {
+      color: var(--muted);
+    }
+    input[type="file"] { display: none; }
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+    }
+    button.secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+    .preview {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: linear-gradient(135deg, #f8fafc, #fff);
+      object-fit: contain;
+      display: none;
+    }
+    .result {
+      margin-top: 18px;
+      border-radius: 18px;
+      padding: 18px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      min-height: 150px;
+    }
+    .result h2 {
+      margin: 0 0 10px;
+      font-size: 1.1rem;
+    }
+    .metric {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 8px;
+      margin: 8px 0;
+    }
+    .metric span:first-child {
+      color: var(--muted);
+    }
+    .confidence-bar {
+      height: 10px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .confidence-bar > div {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-radius: inherit;
+      transition: width .35s ease;
+    }
+    .footnote {
+      font-size: 0.92rem;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+    @media (max-width: 860px) {
+      .content { grid-template-columns: 1fr; }
+      .hero, .content { padding-left: 20px; padding-right: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <section class="hero">
+      <h1>Clasificador de Frutas</h1>
+      <p>Sube una imagen de fruta fresca o malograda y el modelo devolverá la clase predicha y su nivel de confianza. Esta interfaz consume la API local de Flask en <code>/predict</code>.</p>
+    </section>
+
+    <section class="content">
+      <div class="panel">
+        <label id="dropzone" class="dropzone" for="image-input">
+          <strong>Haz clic o arrastra una imagen aquí</strong>
+          <span>Formatos admitidos: JPG, PNG, WEBP</span>
+        </label>
+        <input id="image-input" type="file" accept="image/*">
+
+        <div class="actions">
+          <button id="predict-btn" type="button">Predecir</button>
+          <button id="clear-btn" class="secondary" type="button">Limpiar</button>
+        </div>
+
+        <p id="status" class="status">Esperando imagen.</p>
+        <img id="preview" class="preview" alt="Vista previa">
+      </div>
+
+      <div class="panel">
+        <div class="result">
+          <h2>Resultado</h2>
+          <div class="metric"><span>Clase:</span><strong id="label">-</strong></div>
+          <div class="metric"><span>Confianza:</span><strong id="confidence">-</strong></div>
+          <div class="confidence-bar"><div id="confidence-bar"></div></div>
+          <div class="metric" style="margin-top: 16px;"><span>Modelo:</span><span id="model-path">-</span></div>
+        </div>
+        <p class="footnote">La predicción se hace contra la API local, sin necesidad de subir el modelo manualmente. Si el servicio está activo, la página se conecta directamente al endpoint.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const input = document.getElementById('image-input');
+    const preview = document.getElementById('preview');
+    const statusText = document.getElementById('status');
+    const labelEl = document.getElementById('label');
+    const confidenceEl = document.getElementById('confidence');
+    const confidenceBar = document.getElementById('confidence-bar');
+    const modelPathEl = document.getElementById('model-path');
+    const predictBtn = document.getElementById('predict-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    let selectedFile = null;
+
+    const setStatus = (message) => { statusText.textContent = message; };
+
+    const resetResult = () => {
+      labelEl.textContent = '-';
+      confidenceEl.textContent = '-';
+      confidenceBar.style.width = '0%';
+      modelPathEl.textContent = '-';
+    };
+
+    const loadPreview = (file) => {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        preview.src = reader.result;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    };
+
+    input.addEventListener('change', () => {
+      selectedFile = input.files[0] || null;
+      if (!selectedFile) {
+        setStatus('Esperando imagen.');
+        preview.style.display = 'none';
+        preview.removeAttribute('src');
+        resetResult();
+        return;
+      }
+      setStatus(`Imagen cargada: ${selectedFile.name}`);
+      loadPreview(selectedFile);
+      resetResult();
+    });
+
+    dropzone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropzone.classList.remove('dragover');
+      const file = event.dataTransfer.files[0];
+      if (!file) return;
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      input.files = dataTransfer.files;
+      input.dispatchEvent(new Event('change'));
+    });
+
+    predictBtn.addEventListener('click', async () => {
+      if (!selectedFile) {
+        setStatus('Primero sube una imagen.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', selectedFile);
+      setStatus('Consultando la API...');
+      predictBtn.disabled = true;
+
+      try {
+        const response = await fetch('/predict', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'No fue posible obtener la predicción.');
+        }
+
+        labelEl.textContent = data.predicted_label;
+        confidenceEl.textContent = `${(data.confidence * 100).toFixed(2)}%`;
+        confidenceBar.style.width = `${Math.max(0, Math.min(100, data.confidence * 100))}%`;
+        modelPathEl.textContent = data.model_path;
+        setStatus('Predicción completada.');
+      } catch (error) {
+        setStatus(error.message);
+      } finally {
+        predictBtn.disabled = false;
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      input.value = '';
+      selectedFile = null;
+      preview.style.display = 'none';
+      preview.removeAttribute('src');
+      setStatus('Esperando imagen.');
+      resetResult();
+    });
+  </script>
+</body>
+</html>

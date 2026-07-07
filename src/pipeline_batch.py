@@ -44,7 +44,10 @@ def build_model(num_classes: int):
     from torchvision import models
 
     model = models.efficientnet_b0(weights=None)
-    in_features = model.classifier[1].in_features
+    classifier_head = model.classifier[1]
+    if not isinstance(classifier_head, nn.Linear):
+        raise TypeError("La cabeza del modelo no expone 'in_features'.")
+    in_features = int(classifier_head.in_features)
     model.classifier[1] = nn.Linear(in_features, num_classes)
     return model
 
@@ -108,7 +111,8 @@ def predict_image(
         probabilities = torch.softmax(logits, dim=1)
         confidence, index = probabilities.max(dim=1)
 
-    return class_names[index.item()], float(confidence.item())
+    predicted_index = int(index.item())
+    return class_names[predicted_index], float(confidence.item())
 
 
 def predict_partition(
@@ -272,8 +276,7 @@ def main() -> None:
         output_path=args.output_path,
         sample_limit=args.sample_limit,
     )
-    result_df.show(20, truncate=False)
-    result_df.sparkSession.stop()
+    print(result_df.head(20).to_string(index=False))
 
 
 if __name__ == "__main__":

@@ -18,6 +18,40 @@ MODEL_PATH = Path(os.environ.get("MODEL_PATH", ROOT_DIR / "models" / "modelo_fin
 IMAGE_SIZE = int(os.environ.get("IMAGE_SIZE", "224"))
 PORT = int(os.environ.get("PORT", "5000"))
 
+DISPLAY_LABELS = {
+    "freshapples": "Manzana Fresca",
+    "freshbanana": "Banana Fresca",
+    "freshoranges": "Naranja Fresca",
+    "rottenapples": "Manzana Podrida",
+    "rottenbanana": "Banana Podrida",
+    "rottenoranges": "Naranja Podrida",
+}
+
+
+def translate_label(label: str) -> str:
+    return DISPLAY_LABELS.get(label, label)
+
+
+def quality_status(raw_label: str) -> str:
+    return "Apta" if raw_label.startswith("fresh") else "No apta"
+
+
+def build_prediction_payload(content: bytes) -> dict[str, object]:
+    predicted_label, confidence = predict_image(
+        content=content,
+        model=model,
+        transform=transform,
+        class_names=DEFAULT_CLASS_NAMES,
+        device=device,
+    )
+    return {
+        "predicted_label": translate_label(predicted_label),
+        "raw_label": predicted_label,
+        "quality": quality_status(predicted_label),
+        "confidence": round(confidence, 6),
+        "model_path": str(MODEL_PATH),
+    }
+
 app = Flask(__name__)
 device = get_device()
 model = load_model(MODEL_PATH, class_names=DEFAULT_CLASS_NAMES, device=device)
@@ -51,18 +85,40 @@ def predict():
             return jsonify({"error": "Se requiere un archivo 'image' o el campo 'image_base64'."}), 400
         content = base64.b64decode(image_base64)
 
-    predicted_label, confidence = predict_image(
-        content=content,
-        model=model,
-        transform=transform,
-        class_names=DEFAULT_CLASS_NAMES,
-        device=device,
-    )
+    return jsonify(build_prediction_payload(content))
 
+
+@app.post("/analyze")
+def analyze_batch():
+    uploaded_files = request.files.getlist("images")
+    if not uploaded_files:
+        return jsonify({"error": "Se requiere al menos un archivo en el campo 'images'."}), 400
+
+    items: list[dict[str, object]] = []
+    fresh_count = 0
+    rotten_count = 0
+
+    for uploaded_file in uploaded_files:
+        result = build_prediction_payload(uploaded_file.read())
+        item = {
+            "filename": uploaded_file.filename,
+            **result,
+        }
+        items.append(item)
+        if result["quality"] == "Apta":
+            fresh_count += 1
+        else:
+            rotten_count += 1
+
+    total = len(items)
     return jsonify(
         {
-            "predicted_label": predicted_label,
-            "confidence": round(confidence, 6),
+            "total": total,
+            "fresh_count": fresh_count,
+            "rotten_count": rotten_count,
+            "fresh_percentage": round((fresh_count / total) * 100, 2),
+            "rotten_percentage": round((rotten_count / total) * 100, 2),
+            "items": items,
             "model_path": str(MODEL_PATH),
         }
     )

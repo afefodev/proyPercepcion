@@ -66,10 +66,18 @@
       background: #fff;
     }
     .dropzone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 150px;
       border: 2px dashed #d1d5db;
       border-radius: 18px;
       padding: 24px;
       text-align: center;
+      line-height: 1.45;
       transition: border-color .2s ease, transform .2s ease, background .2s ease;
       background: #fafafa;
       cursor: pointer;
@@ -81,10 +89,11 @@
     }
     .dropzone strong {
       display: block;
-      margin-bottom: 8px;
+      margin-bottom: 0;
       font-size: 1.1rem;
     }
     .dropzone span {
+      display: block;
       color: var(--muted);
     }
     input[type="file"] { display: none; }
@@ -115,6 +124,19 @@
       background: linear-gradient(135deg, #f8fafc, #fff);
       object-fit: contain;
       display: none;
+    }
+    .file-list {
+      width: 100%;
+      margin-top: 12px;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.94rem;
+      text-align: left;
+    }
+    .file-list li {
+      padding: 6px 0;
+      border-bottom: 1px solid #eef2f7;
     }
     .result {
       margin-top: 18px;
@@ -156,6 +178,43 @@
       color: var(--muted);
       margin-top: 12px;
     }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fff;
+    }
+    .summary-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-bottom: 4px;
+    }
+    .summary-card strong {
+      font-size: 1.2rem;
+    }
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.92rem;
+    }
+    .results-table th, .results-table td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      vertical-align: top;
+    }
+    .results-table th {
+      color: var(--muted);
+      font-weight: 600;
+    }
     .status {
       margin-top: 10px;
       font-size: 0.95rem;
@@ -177,28 +236,48 @@
     <section class="content">
       <div class="panel">
         <label id="dropzone" class="dropzone" for="image-input">
-          <strong>Haz clic o arrastra una imagen aquí</strong>
-          <span>Formatos admitidos: JPG, PNG, WEBP</span>
+          <strong>Haz clic o arrastra una o varias imágenes aquí</strong>
+          <span>Formatos admitidos: JPG, JPEG, PNG, WEBP</span>
         </label>
-        <input id="image-input" type="file" accept="image/*">
+        <input id="image-input" type="file" accept="image/*" multiple>
 
         <div class="actions">
           <button id="predict-btn" type="button">Predecir</button>
+          <button id="analyze-btn" type="button">Analizar lote</button>
           <button id="clear-btn" class="secondary" type="button">Limpiar</button>
         </div>
 
         <p id="status" class="status">Esperando imagen.</p>
         <img id="preview" class="preview" alt="Vista previa">
+        <ul id="file-list" class="file-list"></ul>
       </div>
 
       <div class="panel">
         <div class="result">
           <h2>Resultado</h2>
           <div class="metric"><span>Clase:</span><strong id="label">-</strong></div>
+          <div class="metric"><span>Clase original:</span><span id="raw-label">-</span></div>
           <div class="metric"><span>Confianza:</span><strong id="confidence">-</strong></div>
           <div class="confidence-bar"><div id="confidence-bar"></div></div>
           <div class="metric" style="margin-top: 16px;"><span>Modelo:</span><span id="model-path">-</span></div>
         </div>
+        <div id="batch-summary" class="summary-grid" style="display:none;">
+          <div class="summary-card"><span>Total</span><strong id="summary-total">0</strong></div>
+          <div class="summary-card"><span>Aptas</span><strong id="summary-fresh">0</strong></div>
+          <div class="summary-card"><span>No aptas</span><strong id="summary-rotten">0</strong></div>
+          <div class="summary-card"><span>% Aptas</span><strong id="summary-fresh-pct">0%</strong></div>
+        </div>
+        <table id="batch-table" class="results-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Archivo</th>
+              <th>Clase</th>
+              <th>Calidad</th>
+              <th>Confianza</th>
+            </tr>
+          </thead>
+          <tbody id="batch-table-body"></tbody>
+        </table>
         <p class="footnote">La predicción se hace contra la API local, sin necesidad de subir el modelo manualmente. Si el servicio está activo, la página se conecta directamente al endpoint.</p>
       </div>
     </section>
@@ -208,22 +287,56 @@
     const dropzone = document.getElementById('dropzone');
     const input = document.getElementById('image-input');
     const preview = document.getElementById('preview');
+    const fileList = document.getElementById('file-list');
     const statusText = document.getElementById('status');
     const labelEl = document.getElementById('label');
+    const rawLabelEl = document.getElementById('raw-label');
     const confidenceEl = document.getElementById('confidence');
     const confidenceBar = document.getElementById('confidence-bar');
     const modelPathEl = document.getElementById('model-path');
     const predictBtn = document.getElementById('predict-btn');
+    const analyzeBtn = document.getElementById('analyze-btn');
     const clearBtn = document.getElementById('clear-btn');
+    const batchSummary = document.getElementById('batch-summary');
+    const batchTable = document.getElementById('batch-table');
+    const batchTableBody = document.getElementById('batch-table-body');
+    const summaryTotal = document.getElementById('summary-total');
+    const summaryFresh = document.getElementById('summary-fresh');
+    const summaryRotten = document.getElementById('summary-rotten');
+    const summaryFreshPct = document.getElementById('summary-fresh-pct');
     let selectedFile = null;
+    let selectedFiles = [];
 
     const setStatus = (message) => { statusText.textContent = message; };
 
     const resetResult = () => {
       labelEl.textContent = '-';
+      rawLabelEl.textContent = '-';
       confidenceEl.textContent = '-';
       confidenceBar.style.width = '0%';
       modelPathEl.textContent = '-';
+    };
+
+    const resetBatch = () => {
+      batchSummary.style.display = 'none';
+      batchTable.style.display = 'none';
+      batchTableBody.innerHTML = '';
+      summaryTotal.textContent = '0';
+      summaryFresh.textContent = '0';
+      summaryRotten.textContent = '0';
+      summaryFreshPct.textContent = '0%';
+    };
+
+    const renderSelectedFiles = () => {
+      fileList.innerHTML = '';
+      if (!selectedFiles.length) {
+        return;
+      }
+      selectedFiles.forEach((file) => {
+        const item = document.createElement('li');
+        item.textContent = file.name;
+        fileList.appendChild(item);
+      });
     };
 
     const loadPreview = (file) => {
@@ -237,17 +350,22 @@
     };
 
     input.addEventListener('change', () => {
-      selectedFile = input.files[0] || null;
+      selectedFiles = Array.from(input.files || []);
+      selectedFile = selectedFiles[0] || null;
       if (!selectedFile) {
         setStatus('Esperando imagen.');
         preview.style.display = 'none';
         preview.removeAttribute('src');
         resetResult();
+        resetBatch();
+        renderSelectedFiles();
         return;
       }
-      setStatus(`Imagen cargada: ${selectedFile.name}`);
+      setStatus(selectedFiles.length > 1 ? `${selectedFiles.length} imágenes cargadas.` : `Imagen cargada: ${selectedFile.name}`);
       loadPreview(selectedFile);
       resetResult();
+      resetBatch();
+      renderSelectedFiles();
     });
 
     dropzone.addEventListener('dragover', (event) => {
@@ -293,6 +411,7 @@
         }
 
         labelEl.textContent = data.predicted_label;
+        rawLabelEl.textContent = data.raw_label || '-';
         confidenceEl.textContent = `${(data.confidence * 100).toFixed(2)}%`;
         confidenceBar.style.width = `${Math.max(0, Math.min(100, data.confidence * 100))}%`;
         modelPathEl.textContent = data.model_path;
@@ -304,13 +423,65 @@
       }
     });
 
+    analyzeBtn.addEventListener('click', async () => {
+      if (!selectedFiles.length) {
+        setStatus('Primero sube una o varias imágenes.');
+        return;
+      }
+
+      const formData = new FormData();
+      selectedFiles.forEach((file) => formData.append('images', file));
+      setStatus('Analizando lote...');
+      analyzeBtn.disabled = true;
+
+      try {
+        const response = await fetch('/analyze', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'No fue posible analizar el lote.');
+        }
+
+        batchSummary.style.display = 'grid';
+        batchTable.style.display = 'table';
+        summaryTotal.textContent = data.total;
+        summaryFresh.textContent = data.fresh_count;
+        summaryRotten.textContent = data.rotten_count;
+        summaryFreshPct.textContent = `${data.fresh_percentage.toFixed(2)}%`;
+
+        batchTableBody.innerHTML = '';
+        data.items.forEach((item) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${item.filename || '-'}</td>
+            <td>${item.predicted_label}</td>
+            <td>${item.quality}</td>
+            <td>${(item.confidence * 100).toFixed(2)}%</td>
+          `;
+          batchTableBody.appendChild(row);
+        });
+
+        setStatus('Análisis de lote completado.');
+      } catch (error) {
+        setStatus(error.message);
+      } finally {
+        analyzeBtn.disabled = false;
+      }
+    });
+
     clearBtn.addEventListener('click', () => {
       input.value = '';
       selectedFile = null;
+      selectedFiles = [];
       preview.style.display = 'none';
       preview.removeAttribute('src');
       setStatus('Esperando imagen.');
       resetResult();
+      resetBatch();
+      renderSelectedFiles();
     });
   </script>
 </body>
